@@ -361,23 +361,31 @@
 							<span>▼</span>
 						</div>
 						<div class="ot-collapsible-content">
-							<div style="display:flex;gap:24px;flex-wrap:wrap;">
-								<div style="flex:1;">
+							<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:stretch;">
+								<div style="flex:1;min-width:280px;">
 									<h4>Массовый импорт</h4>
-									<textarea id="ot-bulkImportText" rows="6" placeholder="[общая] 1. Вопрос&#10;- Вариант 1&#10;- *Правильный"></textarea>
-									<button id="ot-bulkImportBtn" class="btn-green">Импорт</button>
-									<button id="ot-clearAllBtn" class="btn-red">Очистить всё</button>
+									<textarea id="ot-bulkImportText" rows="6" placeholder="[общая]&#10;1. Вопрос&#10;- Вариант 1&#10;- *Правильный"></textarea>
+									<div style="margin-top:8px;">
+										<button id="ot-bulkImportBtn" class="btn-green">Импорт</button>
+										<button id="ot-clearAllBtn" class="btn-red">Очистить всё</button>
+									</div>
 								</div>
-								<div style="flex:1;background:#f8fafc;padding:16px;border-radius:20px;">
+								<div style="flex:1;min-width:280px;background:#f8fafc;padding:16px;border-radius:20px;box-sizing:border-box;">
 									<strong>Шаблон:</strong>
-									<pre>
-										[общая] 1. Вопрос
+									<pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:10px;font-size:12px;overflow-x:auto;margin-top:8px;line-height:1.5;">
+										[общая]
+										1. Вопрос
 										- Вариант 1
 										- *Правильный
+
+										[первая помощь]
+										2. Ещё вопрос
+										- *Правильный вариант
+										- Неправильный
 									</pre>
 								</div>
 							</div>
-							<hr>
+							<hr style="margin:24px 0 16px;">
 								<h4>Ручное добавление</h4>
 								<select id="ot-questionCategorySelect">
 									<option value="general">Организация охраны труда</option>
