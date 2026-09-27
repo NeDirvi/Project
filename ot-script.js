@@ -256,7 +256,6 @@
         var rh = "<h3>Результат теста</h3>";
         rh += "<div class='ot-result-percent'>" + p + "%</div>";
         rh += "<p>Правильно: " + correct + " из " + ot_testQuestions.length + " &nbsp;·&nbsp; Ошибок: " + wrong + "</p>";
-
         rh += "<hr><h4>Разбор всех ответов:</h4>";
         for (var idx = 0; idx < details.length; idx++) {
             var item = details[idx];
@@ -271,7 +270,6 @@
             }
             rh += "</div>";
         }
-
         var resultDiv = document.getElementById("ot-testResult");
         if (resultDiv) { resultDiv.innerHTML = rh; resultDiv.style.display = "block"; }
         var subBtn = document.getElementById("ot-submitTestBtn"); if (subBtn) subBtn.style.display = "none";
@@ -287,11 +285,16 @@
             var html = "";
             for (var idx = 0; idx < ot_questionBank.length; idx++) {
                 var q = ot_questionBank[idx];
-                html += "<div class='ot-question-item'><b>" + ot_categoriesMap[q.category] + " - " + ot_escapeHtml(q.text) + "</b><ul>";
+                html += "<div class='ot-question-item' style='padding-right:20px;'>";
+                html += "<b>" + ot_categoriesMap[q.category] + " - " + ot_escapeHtml(q.text) + "</b><ul>";
                 for (var a = 0; a < q.answers.length; a++) {
                     html += "<li>" + ot_escapeHtml(q.answers[a].text) + (q.answers[a].isCorrect ? " ✅" : "") + "</li>";
                 }
-                html += "</ul></div>";
+                html += "</ul>";
+                html += "<div class='ot-flex' style='margin-top:8px;'>";
+                html += "<button type='button' class='btn-purple' onclick='otEditQuestionById(" + idx + ")'>✏️ Редактировать</button>";
+                html += "<button type='button' class='btn-red' onclick='otDeleteQuestionById(" + idx + ")'>🗑️ Удалить</button>";
+                html += "</div></div>";
             }
             container.innerHTML = html || "<div>Вопросов нет</div>";
         }
@@ -329,9 +332,236 @@
         container.innerHTML = html;
     }
 
+    // ---------- Редактирование / удаление вопроса ----------
+    function ot_buildEditModal() {
+        if (document.getElementById("ot-editQuestionModal")) return;
+        var modal = document.createElement("div");
+        modal.id = "ot-editQuestionModal";
+        modal.className = "ot-edit-modal";
+        modal.style.display = "none";
+        modal.innerHTML =
+            '<div class="ot-edit-modal-content">' +
+                '<button type="button" class="ot-edit-close">✕</button>' +
+                '<h3>Редактирование вопроса</h3>' +
+                '<label>Категория:</label>' +
+                '<select id="ot-editCategory">' +
+                    '<option value="general">Организация охраны труда</option>' +
+                    '<option value="first_aid">Первая помощь</option>' +
+                    '<option value="electric">Электробезопасность</option>' +
+                    '<option value="fire">Пожарная безопасность</option>' +
+                    '<option value="height">Работа на высоте</option>' +
+                    '<option value="work">Безопасность работ</option>' +
+                '</select>' +
+                '<div class="ot-flex" style="margin:8px 0;">' +
+                    '<label style="display:inline-block;margin:0 16px 0 0;font-weight:normal;">' +
+                        '<input type="radio" name="ot-editType" value="single" checked> Одиночный' +
+                    '</label>' +
+                    '<label style="display:inline-block;margin:0;font-weight:normal;">' +
+                        '<input type="radio" name="ot-editType" value="multiple"> Множественный' +
+                    '</label>' +
+                '</div>' +
+                '<label>Текст вопроса:</label>' +
+                '<textarea id="ot-editQuestionText" rows="3"></textarea>' +
+                '<label>Пояснение:</label>' +
+                '<input type="text" id="ot-editExplanation">' +
+                '<label style="margin-top:14px;">Варианты ответов (отметьте правильные):</label>' +
+                '<div id="ot-editAnswersContainer"></div>' +
+                '<button type="button" id="ot-editAddAnswer" class="btn-purple">+ Добавить вариант</button>' +
+                '<div class="ot-flex" style="margin-top:16px;">' +
+                    '<button type="button" id="ot-editSave" class="btn-green">Сохранить</button>' +
+                    '<button type="button" id="ot-editCancel" class="btn-red">Отмена</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(modal);
+
+        modal.querySelector(".ot-edit-close").onclick = ot_closeEditModal;
+        modal.querySelector("#ot-editCancel").onclick = ot_closeEditModal;
+        modal.querySelector("#ot-editAddAnswer").onclick = function() { ot_addEditAnswerRow("", false); };
+        modal.querySelector("#ot-editSave").onclick = ot_saveEditedQuestion;
+        modal.onclick = function(e) { if (e.target === modal) ot_closeEditModal(); };
+    }
+
+    function ot_closeEditModal() {
+        var m = document.getElementById("ot-editQuestionModal");
+        if (m) m.style.display = "none";
+    }
+
+    function ot_addEditAnswerRow(text, isCorrect) {
+        var c = document.getElementById("ot-editAnswersContainer");
+        if (!c) return;
+        var row = document.createElement("div");
+        row.className = "ot-answer-row";
+        row.style.marginBottom = "8px";
+        row.innerHTML =
+            '<input type="text" class="ot-edit-answer-input" value="' + ot_escapeHtml(text) + '" placeholder="Вариант ответа" style="flex:1;">' +
+            '<label style="white-space:nowrap;"><input type="checkbox" class="ot-edit-correct-check" ' + (isCorrect ? "checked" : "") + '> Правильный</label>' +
+            '<button type="button" class="btn-red ot-edit-remove-row" style="padding:4px 10px;">✕</button>';
+        row.querySelector(".ot-edit-remove-row").onclick = function() { row.remove(); };
+        c.appendChild(row);
+    }
+
+    function ot_saveEditedQuestion() {
+        var modal = document.getElementById("ot-editQuestionModal");
+        if (!modal) return;
+        var idx = parseInt(modal.dataset.editIndex);
+        if (isNaN(idx) || idx < 0 || idx >= ot_questionBank.length) return;
+        var text = document.getElementById("ot-editQuestionText").value.trim();
+        if (!text) { alert("Введите текст вопроса"); return; }
+        var cat = document.getElementById("ot-editCategory").value;
+        var typeRadio = document.querySelector("input[name='ot-editType']:checked");
+        var type = typeRadio ? typeRadio.value : "single";
+        var explanation = document.getElementById("ot-editExplanation").value.trim();
+        var answers = [];
+        var hasCorrect = false;
+        var rows = document.querySelectorAll("#ot-editAnswersContainer .ot-answer-row");
+        for (var i = 0; i < rows.length; i++) {
+            var t = rows[i].querySelector(".ot-edit-answer-input").value.trim();
+            if (!t) continue;
+            var isC = rows[i].querySelector(".ot-edit-correct-check").checked;
+            if (isC) hasCorrect = true;
+            answers.push({ text: t, isCorrect: isC });
+        }
+        if (answers.length < 2) { alert("Добавьте минимум 2 варианта ответа"); return; }
+        if (!hasCorrect) { alert("Отметьте правильный ответ"); return; }
+        ot_questionBank[idx].text = text;
+        ot_questionBank[idx].category = cat;
+        ot_questionBank[idx].type = type;
+        ot_questionBank[idx].explanation = explanation;
+        ot_questionBank[idx].answers = answers;
+        ot_saveToLocal();
+        ot_renderAdminUI();
+        ot_closeEditModal();
+        ot_showNotification("Вопрос обновлён");
+    }
+
+    window.otEditQuestionById = function(idx) {
+        if (idx < 0 || idx >= ot_questionBank.length) return;
+        var q = ot_questionBank[idx];
+        ot_buildEditModal();
+        var modal = document.getElementById("ot-editQuestionModal");
+        modal.dataset.editIndex = idx;
+        document.getElementById("ot-editCategory").value = q.category || "general";
+        var typeRadio = document.querySelector("input[name='ot-editType'][value='" + (q.type || "single") + "']");
+        if (typeRadio) typeRadio.checked = true;
+        document.getElementById("ot-editQuestionText").value = q.text || "";
+        document.getElementById("ot-editExplanation").value = q.explanation || "";
+        var ac = document.getElementById("ot-editAnswersContainer");
+        ac.innerHTML = "";
+        for (var i = 0; i < q.answers.length; i++) {
+            ot_addEditAnswerRow(q.answers[i].text, q.answers[i].isCorrect);
+        }
+        modal.style.display = "flex";
+    };
+
+    window.otDeleteQuestionById = function(idx) {
+        if (idx < 0 || idx >= ot_questionBank.length) return;
+        if (!confirm("Удалить этот вопрос?")) return;
+        ot_questionBank.splice(idx, 1);
+        ot_saveToLocal();
+        ot_renderAdminUI();
+        ot_showNotification("Вопрос удалён");
+    };
+
+    // ---------- Массовый импорт ----------
+    function ot_parseCategoryToken(name) {
+        var n = (name || "").toLowerCase().trim();
+        if (n.indexOf("общ") !== -1) return "general";
+        if (n.indexOf("перв") !== -1 || n.indexOf("помощ") !== -1) return "first_aid";
+        if (n.indexOf("электр") !== -1) return "electric";
+        if (n.indexOf("пожар") !== -1) return "fire";
+        if (n.indexOf("высот") !== -1) return "height";
+        if (n.indexOf("безопас") !== -1 || n.indexOf("работ") !== -1) return "work";
+        return null;
+    }
+
+        function ot_bulkImportQuestions(rawText) {
+        var lines = (rawText || "").split(/\r?\n/);
+        var added = 0;
+        var errors = [];
+        var currentCat = "general";
+        var currentQ = null;
+
+        function finalize() {
+            if (!currentQ) return;
+            var qText = currentQ.text.trim();
+            if (!qText) { currentQ = null; return; }
+            if (currentQ.answers.length < 2) {
+                errors.push("«" + qText.substring(0, 40) + "...» — меньше 2 вариантов");
+                currentQ = null;
+                return;
+            }
+            var hasC = false;
+            for (var i = 0; i < currentQ.answers.length; i++) {
+                if (currentQ.answers[i].isCorrect) { hasC = true; break; }
+            }
+            if (!hasC) {
+                errors.push("«" + qText.substring(0, 40) + "...» — не отмечен правильный ответ (поставьте * перед вариантом)");
+                currentQ = null;
+                return;
+            }
+            var type = "single";
+            var correctCount = 0;
+            for (var ci = 0; ci < currentQ.answers.length; ci++) if (currentQ.answers[ci].isCorrect) correctCount++;
+            if (correctCount > 1) type = "multiple";
+            ot_questionBank.push({
+                id: Date.now() + Math.random(),
+                category: currentQ.category || "general",
+                type: type,
+                text: qText,
+                explanation: "",
+                image: "",
+                answers: currentQ.answers.slice()
+            });
+            added++;
+            currentQ = null;
+        }
+
+        for (var li = 0; li < lines.length; li++) {
+            var line = lines[li].replace(/\s+$/, "");
+            var trimmed = line.trim();
+            if (trimmed === "") continue; // пустые строки просто пропускаем
+
+            // Категория в квадратных скобках
+            var catMatch = trimmed.match(/^\[([^\]]+)\]\s*(.*)$/);
+            if (catMatch) {
+                var parsedCat = ot_parseCategoryToken(catMatch[1]);
+                if (parsedCat) currentCat = parsedCat;
+                trimmed = catMatch[2].trim();
+                if (trimmed === "") continue;
+            }
+
+            // Вариант ответа (начинается с - или *)
+            if (/^[-*]\s+/.test(trimmed)) {
+                var isCorrect = /^\*\s+/.test(trimmed);
+                var ansText = trimmed.replace(/^[-*]\s+/, "").trim();
+                if (currentQ && ansText) {
+                    currentQ.answers.push({ text: ansText, isCorrect: isCorrect });
+                }
+                continue;
+            }
+
+            // Строка начинается с "N." или "N)" — начало нового вопроса
+            var qMatch = trimmed.match(/^\d+[.)]\s*(.+)$/);
+            if (qMatch) {
+                finalize();
+                currentQ = { category: currentCat, text: qMatch[1].trim(), answers: [] };
+                continue;
+            }
+
+            // Иначе — это просто текст, продолжаем текущий вопрос (или создаём новый)
+            if (currentQ) {
+                currentQ.text += " " + trimmed;
+            } else {
+                currentQ = { category: currentCat, text: trimmed, answers: [] };
+            }
+        }
+        finalize();
+
+        return { added: added, errors: errors };
+    }
+
     // ---------- Инициализация ----------
     function ot_init() {
-        // Начать экзамен
         var startExamBtn = document.getElementById("ot-startExamBtn");
         if (startExamBtn) startExamBtn.onclick = function() {
             var s = ot_capitalizeFirst((document.getElementById("ot-userSurname")||{}).value || "");
@@ -357,7 +587,6 @@
             ot_renderExam();
         };
 
-        // Выйти
         var logoutBtn = document.getElementById("ot-logoutBtn");
         if (logoutBtn) logoutBtn.onclick = function() {
             ot_currentUser = null;
@@ -369,14 +598,12 @@
             document.getElementById("ot-examContainer").innerHTML = "";
         };
 
-        // Завершить экзамен
         var submitExamBtn = document.getElementById("ot-submitExamBtn");
         if (submitExamBtn) submitExamBtn.onclick = function() {
             if (!ot_checkUnanswered()) return;
             ot_showExamResult();
         };
 
-        // Вкладки Экзамен/Тест
         var modeTabs = document.querySelectorAll(".ot-mode-tab");
         for (var mt = 0; mt < modeTabs.length; mt++) {
             modeTabs[mt].onclick = function() {
@@ -388,7 +615,6 @@
             };
         }
 
-        // Админ-панель
         var showAdminBtn = document.getElementById("showAdminBtn");
         if (showAdminBtn) showAdminBtn.onclick = function() {
             document.getElementById("ot-passwordScreen").style.display = "flex";
@@ -428,7 +654,6 @@
             document.getElementById("ot-userPanel").style.display = "block";
         };
 
-        // Кнопки шрифта и инструкций
         var fontPlus = document.getElementById("fontPlusBtn");
         if (fontPlus) fontPlus.onclick = function() {
             if (ot_fontSize < 24) { ot_fontSize += 2; document.body.style.fontSize = ot_fontSize + "px"; document.getElementById("fontSizeDisplay").innerText = ot_fontSize + "px"; }
@@ -456,7 +681,6 @@
             document.getElementById("ot-instructionsModal").style.display = "none";
         };
 
-        // ТЕСТ
         var startTestBtn = document.getElementById("ot-startTestBtn");
         if (startTestBtn) startTestBtn.onclick = function() {
             var cat = document.getElementById("ot-testCategorySelect").value;
@@ -496,7 +720,6 @@
             ot_showNotification("Вопросы обновлены");
         };
 
-        // АККОРДЕОНЫ
         var ot_headers = document.querySelectorAll("#ohrana-truda-tab .ot-collapsible-header");
         for (var h = 0; h < ot_headers.length; h++) {
             ot_headers[h].onclick = function(e) {
@@ -514,7 +737,6 @@
             };
         }
 
-        // ПОЛЗУНОК
         var slider = document.getElementById("ot-passRateSlider");
         if (slider) {
             slider.oninput = function(e) {
@@ -524,7 +746,6 @@
             };
         }
 
-        // КАТЕГОРИИ
         function ot_updateCategoryTotal() {
             var g = parseInt((document.getElementById("ot-catGeneral")||{}).value) || 0;
             var f = parseInt((document.getElementById("ot-catFirstAid")||{}).value) || 0;
@@ -594,7 +815,6 @@
             ot_showNotification("Экзамен сформирован: " + sel.length + " вопросов");
         };
 
-        // ПОИСК
         var searchInput = document.getElementById("ot-searchQuestionsInput");
         if (searchInput) searchInput.oninput = function() {
             var val = this.value.toLowerCase();
@@ -613,7 +833,6 @@
             container.innerHTML = html || "<div>Ничего не найдено</div>";
         };
 
-        // ПОЛЬЗОВАТЕЛИ / СОТРУДНИКИ
         var showSysBtn = document.getElementById("ot-showSystemUsersBtn");
         if (showSysBtn) showSysBtn.onclick = function() { ot_renderSystemUsers(); };
         var showEmpBtn = document.getElementById("ot-showEmployeesDataBtn");
@@ -622,11 +841,9 @@
             document.getElementById("ot-systemUsersContainer").innerHTML = "";
         };
 
-        // ПОИСК СОТРУДНИКОВ
         var searchEmp = document.getElementById("ot-searchEmployeeInput");
         if (searchEmp) searchEmp.oninput = function() { ot_showNotification("Поиск: " + this.value); };
 
-        // ИНСТРУКЦИИ (админка)
         var adminSearch = document.getElementById("ot-adminInstructionsSearch");
         if (adminSearch) adminSearch.oninput = function() { ot_renderInstructionsAdmin(); };
 
@@ -646,7 +863,32 @@
             ot_showNotification("Инструкция добавлена");
         };
 
-        // Загрузка данных
+        var bulkBtn = document.getElementById("ot-bulkImportBtn");
+        if (bulkBtn) bulkBtn.onclick = function() {
+            var ta = document.getElementById("ot-bulkImportText");
+            var raw = ta ? ta.value : "";
+            if (!raw.trim()) { alert("Вставьте текст для импорта"); return; }
+            var res = ot_bulkImportQuestions(raw);
+            ot_saveToLocal();
+            ot_renderAdminUI();
+            var msg = "Импортировано вопросов: " + res.added;
+            if (res.errors.length) {
+                msg += "\n\nНе удалось обработать:\n• " + res.errors.join("\n• ");
+            }
+            alert(msg);
+            if (res.added > 0 && ta) ta.value = "";
+            ot_showNotification("Импорт завершён: +" + res.added);
+        };
+
+        var clearAllBtn = document.getElementById("ot-clearAllBtn");
+        if (clearAllBtn) clearAllBtn.onclick = function() {
+            if (!confirm("Удалить ВСЕ вопросы из банка? Это действие нельзя отменить.")) return;
+            ot_questionBank = [];
+            ot_saveToLocal();
+            ot_renderAdminUI();
+            ot_showNotification("Банк вопросов очищен");
+        };
+
         var bank = localStorage.getItem("ot_bank");
         ot_questionBank = bank && JSON.parse(bank).length ? JSON.parse(bank) : ot_getDefaultQuestions();
         var res = localStorage.getItem("ot_results");
